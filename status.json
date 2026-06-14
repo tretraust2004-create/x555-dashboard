@@ -6,7 +6,6 @@
   "done_count": 6,
   "review_required_count": 1,
   "failed_count": 1,
-  "quota_frac": -1.0,
-  "host": "ddd-X555UJ",
-  "updated_at": 1781420773
+  "quota_frac": 0.009,
+  "updated_at": 1781420952
 }
