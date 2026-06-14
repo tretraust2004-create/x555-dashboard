@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>X555 Lab</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: #0f1115; --card: #1a1d24; --ink: #e8eaed; --muted: #9aa0a6;
+    --accent: #2c6fb5; --green: #2e8b66; --orange: #d9822b; --red: #c0392b;
+    --line: #2a2e37;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 14px; padding-bottom: 40px;
+  }
+  h1 { font-size: 17px; margin: 4px 0 2px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+  .label { color: var(--muted); font-size: 13px; }
+  .val { font-size: 14px; font-weight: 500; }
+  .big { font-size: 22px; font-weight: 700; }
+  .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+  }
+  .pill.run { background: rgba(46,139,102,.18); color: #5fd0a0; }
+  .pill.idle { background: rgba(154,160,166,.15); color: var(--muted); }
+  .bar { height: 8px; background: #20242c; border-radius: 999px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; text-align: center; }
+  .stat .n { font-size: 20px; font-weight: 700; }
+  .stat .t { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat.done .n { color: #5fd0a0; }
+  .stat.review .n { color: var(--orange); }
+  .stat.failed .n { color: #e07b6e; }
+  .quota .bar > i { background: var(--green); }
+  .quota.warn .bar > i { background: var(--orange); }
+  .quota.crit .bar > i { background: var(--red); }
+  .foot { color: var(--muted); font-size: 11px; text-align: center; margin-top: 16px; }
+  .err { color: #e07b6e; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>🧪 X555 Research Lab</h1>
+  <div class="sub" id="updated">đang tải…</div>
+
+  <div class="card">
+    <div class="row">
+      <span class="label">Queue</span>
+      <span id="qstate" class="pill idle">—</span>
+    </div>
+    <div class="row"><span class="label">Stage</span><span class="val" id="stage">—</span></div>
+    <div class="row"><span class="label">Tiến độ</span><span class="val" id="pct">—</span></div>
+    <div class="bar"><i id="bar" style="width:0%"></i></div>
+  </div>
+
+  <div class="grid">
+    <div class="stat done"><div class="n" id="done">—</div><div class="t">Done</div></div>
+    <div class="stat review"><div class="n" id="review">—</div><div class="t">Review</div></div>
+    <div class="stat failed"><div class="n" id="failed">—</div><div class="t">Failed</div></div>
+  </div>
+
+  <div class="card quota" id="quotaCard" style="margin-top:12px">
+    <div class="row">
+      <span class="label">Quota pool</span>
+      <span class="val" id="quotaTxt">—</span>
+    </div>
+    <div class="bar"><i id="quotaBar" style="width:0%"></i></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="label">Pending</span><span class="val" id="pending">—</span></div>
+    <div class="row"><span class="label">Host</span><span class="val" id="host">—</span></div>
+  </div>
+
+  <div class="foot" id="foot">read-only · tự cập nhật mỗi 20s</div>
+
+<script>
+(function () {
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[<>&]/g, function (c) {
+      return { "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c];
+    });
+  }
+  function ago(ts) {
+    if (!ts) return "—";
+    var d = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+    if (d < 60) return d + "s trước";
+    if (d < 3600) return Math.floor(d / 60) + "m trước";
+    return Math.floor(d / 3600) + "h trước";
+  }
+
+  function render(s) {
+    var running = (s.status || "").toLowerCase() === "running";
+    var qs = document.getElementById("qstate");
+    qs.textContent = running ? "▶ running" : (s.status || "idle");
+    qs.className = "pill " + (running ? "run" : "idle");
+
+    document.getElementById("stage").textContent = esc(s.stage || "—");
+    var p = Math.max(0, Math.min(100, Number(s.progress) || 0));
+    document.getElementById("pct").textContent = p + "%";
+    document.getElementById("bar").style.width = p + "%";
+
+    document.getElementById("done").textContent = s.done_count != null ? s.done_count : "—";
+    document.getElementById("review").textContent = s.review_required_count != null ? s.review_required_count : "—";
+    document.getElementById("failed").textContent = s.failed_count != null ? s.failed_count : "—";
+    document.getElementById("pending").textContent = s.pending_tasks != null ? s.pending_tasks : "—";
+    document.getElementById("host").textContent = esc(s.host || "—");
+
+    var qf = Number(s.quota_frac);
+    var qcard = document.getElementById("quotaCard");
+    if (isFinite(qf) && qf >= 0) {
+      var pctq = Math.round(qf * 100);
+      document.getElementById("quotaTxt").textContent = pctq + "% dùng";
+      document.getElementById("quotaBar").style.width = pctq + "%";
+      qcard.className = "card quota" + (qf >= 0.92 ? " crit" : qf >= 0.8 ? " warn" : "");
+    } else {
+      document.getElementById("quotaTxt").textContent = "—";
+    }
+
+    document.getElementById("updated").textContent = "cập nhật " + ago(s.updated_at);
+  }
+
+  function load() {
+    fetch("status.json?_=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(render)
+      .catch(function (e) {
+        document.getElementById("updated").innerHTML =
+          '<span class="err">không tải được status.json (' + esc(e.message) + ')</span>';
+      });
+  }
+
+  load();
+  setInterval(load, 20000);
+})();
+</script>
+</body>
+</html>
